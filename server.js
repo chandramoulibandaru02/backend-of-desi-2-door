@@ -4,19 +4,34 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
-const helmet = require('helmet'); // New
-const rateLimit = require('express-rate-limit'); // New
-const mongoSanitize = require('express-mongo-sanitize'); // New
-const compression = require('compression'); // New
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const compression = require('compression');
 
 const app = express();
 
-// --- 1. Top Level Security & Performance ---
-app.use(helmet()); 
-app.use(mongoSanitize());
-app.use(compression());
+// 1. JSON Body Parser (Idi thappakunda undali!)
+app.use(express.json()); // Frontend nunchi vachina login data ni backend ki teliyajestundi
 
-// Rate limiting: 15 mins lo max 100 requests per IP
+// 2. Middleware & Security
+app.use(helmet()); // Secure headers
+app.use(mongoSanitize()); // Prevent NoSQL injection
+app.use(compression()); // Response size ni taggistundi
+
+// 3. CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,
+  '*' // Testing phase lo unnav kabatti access easy ga untundi
+].filter(Boolean);
+
+app.use(cors({ 
+  origin: allowedOrigins, 
+  credentials: true 
+}));
+
+// 4. Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -24,31 +39,30 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// --- 2. Middleware & CORS ---
-const allowedOrigins = [
-  'http://localhost:3000',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
-
-app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// --- 3. Static Files ---
+// 5. Uploads directory setup
 const uploadsDir = path.join(__dirname, 'uploads/products');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// --- 4. Routes ---
+// 6. Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/orders', require('./routes/orders'));
 
+// Health check
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Desi2Door API running!' }));
 
-// --- 5. Database & Server ---
+// 7. 404 & Global Error Handler
+app.use('*', (req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, message: 'Something went wrong!' });
+});
+
+// 8. DB Connection & Server Start
 const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000, tls: true })
+mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected!');
     app.listen(PORT, () => console.log(`🚀 Desi2Door server running on port ${PORT}`));
@@ -61,6 +75,7 @@ mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 5000, tls: t
 // Graceful Shutdown
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
+  console.log('MongoDB connection closed.');
   process.exit(0);
 });
 
