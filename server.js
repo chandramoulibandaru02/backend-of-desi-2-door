@@ -5,49 +5,63 @@ const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit'); // Library import
+const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const compression = require('compression');
 
 const app = express();
 
-// Render deployment lo idi thappakunda undali!
+// 1. RENDER PROXY TRUST (Validation errors raakunda)
 app.set('trust proxy', 1);
 
-// 1. JSON Body Parser (Frontend login data kosam)
+// 2. BODY PARSERS
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// 2. Middleware & Security
-app.use(helmet()); 
+// 3. SECURITY MIDDLEWARES
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Images load avvadaniki idi avasaram
+})); 
 app.use(mongoSanitize()); 
 app.use(compression()); 
 
-// 3. CORS Configuration
+// 4. CORS CONFIGURATION (Localhost 3001 fix ikkade undi)
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_URL,
-  '*' 
+  'http://localhost:3001', // Nee console lo unna error fix kosam idi add chesa
+  process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(cors({ 
-  origin: allowedOrigins, 
-  credentials: true 
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl) or if in allowedOrigins or if it's a testing wildcard
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// 4. Rate Limiting (Variable name 'limiter' nunchi 'apiLimiter' ki marchanu duplication lekunda)
+// 5. RATE LIMITING
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: 'Too many requests, please try again later.'
 });
 app.use('/api/', apiLimiter);
 
-// 5. Uploads directory setup
+// 6. STATIC FILES & UPLOADS
 const uploadsDir = path.join(__dirname, 'uploads/products');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 6. Routes
+// 7. ROUTES
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/orders', require('./routes/orders'));
@@ -55,15 +69,19 @@ app.use('/api/orders', require('./routes/orders'));
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Desi2Door API running!' }));
 
-// 7. 404 & Global Error Handler
+// 8. ERROR HANDLING
 app.use('*', (req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ success: false, message: 'Something went wrong!' });
+  console.error('🔥 Error:', err.message);
+  res.status(500).json({ 
+    success: false, 
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined 
+  });
 });
 
-// 8. DB Connection & Server Start
+// 9. DATABASE & SERVER START
 const PORT = process.env.PORT || 5000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
