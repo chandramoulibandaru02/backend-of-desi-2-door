@@ -5,29 +5,28 @@ const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const rateLimit = require('express-rate-limit'); // Library import
 const mongoSanitize = require('express-mongo-sanitize');
 const compression = require('compression');
+
 const app = express();
 
 // Render deployment lo idi thappakunda undali!
 app.set('trust proxy', 1);
 
-// Rate Limiter Configuration
-
-// 1. JSON Body Parser (Idi thappakunda undali!)
-app.use(express.json()); // Frontend nunchi vachina login data ni backend ki teliyajestundi
+// 1. JSON Body Parser (Frontend login data kosam)
+app.use(express.json());
 
 // 2. Middleware & Security
-app.use(helmet()); // Secure headers
-app.use(mongoSanitize()); // Prevent NoSQL injection
-app.use(compression()); // Response size ni taggistundi
+app.use(helmet()); 
+app.use(mongoSanitize()); 
+app.use(compression()); 
 
 // 3. CORS Configuration
 const allowedOrigins = [
   'http://localhost:3000',
   process.env.FRONTEND_URL,
-  '*' // Testing phase lo unnav kabatti access easy ga untundi
+  '*' 
 ].filter(Boolean);
 
 app.use(cors({ 
@@ -35,13 +34,13 @@ app.use(cors({
   credentials: true 
 }));
 
-// 4. Rate Limiting
-const limiter = rateLimit({
+// 4. Rate Limiting (Variable name 'limiter' nunchi 'apiLimiter' ki marchanu duplication lekunda)
+const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: 'Too many requests, please try again later.'
 });
-app.use('/api/', limiter);
+app.use('/api/', apiLimiter);
 
 // 5. Uploads directory setup
 const uploadsDir = path.join(__dirname, 'uploads/products');
