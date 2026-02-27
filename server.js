@@ -8,9 +8,19 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const compression = require('compression');
-
 const app = express();
-app.set('trust proxy', 1); // Idi thappakunda undali Render/Netlify deployments lo
+
+// Render deployment lo idi thappakunda undali!
+app.set('trust proxy', 1);
+
+// Rate Limiter Configuration
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true, 
+  legacyHeaders: false,
+  message: 'Too many requests, please try again later.'
+});
 // 1. JSON Body Parser (Idi thappakunda undali!)
 app.use(express.json()); // Frontend nunchi vachina login data ni backend ki teliyajestundi
 
