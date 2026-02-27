@@ -10,7 +10,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const compression = require('compression');
 
 const app = express();
-
+app.set('trust proxy', 1); // Idi thappakunda undali Render/Netlify deployments lo
 // 1. JSON Body Parser (Idi thappakunda undali!)
 app.use(express.json()); // Frontend nunchi vachina login data ni backend ki teliyajestundi
 
