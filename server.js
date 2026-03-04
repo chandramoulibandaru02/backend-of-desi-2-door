@@ -4,24 +4,39 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const compression = require('compression');
 
 const app = express();
 
-// 1. Ee line thappakunda add cheyi, idhi lekapothe login avvadhu!
-app.use(express.json()); 
+// Security & Performance Middlewares (MUST come first)
+app.use(helmet());
+app.use(mongoSanitize());
+app.use(compression());
 
-// 2. CORS setting re-check
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests, please try again later.'
+});
+app.use('/api/', limiter);
+
+// Body parser
+app.use(express.json());
+
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_URL,
-  '*' // Temporary ga testing kosam idi add cheyi
+  process.env.FRONTEND_URL
 ].filter(Boolean);
 
-app.use(cors({ 
-  origin: allowedOrigins, 
-  credentials: true 
+app.use(cors({
+  origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+  credentials: true
 }));
-
 
 // Create uploads directory if not exists
 const uploadsDir = path.join(__dirname, 'uploads/products');
@@ -61,30 +76,13 @@ mongoose.connect(process.env.MONGO_URI, {
     console.error('❌ DB connection failed:', err.message);
     process.exit(1);
   });
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
 
-// Middlewares
-app.use(helmet()); // Secure headers
-app.use(mongoSanitize()); // Prevent NoSQL injection
-
-// Rate limiting: 15 mins lo max 100 requests per IP
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again later.'
-});
-app.use('/api/', limiter);
-const compression = require('compression');
-app.use(compression());
-
+// Graceful shutdown
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
   console.log('MongoDB connection closed.');
   process.exit(0);
 });
-
 
 module.exports = app;
 
